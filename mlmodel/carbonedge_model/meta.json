@@ -1,0 +1,26 @@
+{
+  "columns": [
+    "kiln_temperature",
+    "secondary_air_temp",
+    "kiln_pressure",
+    "rotary_speed_rpm",
+    "fuel_flow_rate",
+    "primary_airflow",
+    "secondary_airflow",
+    "motor_current",
+    "vibration_level",
+    "exhaust_o2",
+    "exhaust_co",
+    "exhaust_co2",
+    "feed_rate",
+    "kiln_torque",
+    "preheater_temp",
+    "clinker_temp"
+  ],
+  "seq_len": 80,
+  "threshold": 1.6653563594818117,
+  "n_features": 16,
+  "percentile": 99,
+  "val_mean_error": 1.0049688816070557,
+  "val_std_error": 0.17508162558078766
+}

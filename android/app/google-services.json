@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "50292431716",
+    "project_id": "carbonedge-3df44",
+    "storage_bucket": "carbonedge-3df44.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:50292431716:android:dd63cc8340f28f3954f871",
+        "android_client_info": {
+          "package_name": "com.example.carbonedge"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAN7UtDi34SDMF-6Hz_IIOaDA7VFrrMq64"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
