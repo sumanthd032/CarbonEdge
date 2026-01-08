@@ -50,6 +50,6 @@ def generate_kiln_dataset(rows=10000, anomaly_rate=0.01):
 
 
 df = generate_kiln_dataset(rows=10000, anomaly_rate=0.005)
-df.to_csv("normal_dataset.csv", index=False)
+df.to_csv("anomaly_dataset.csv", index=False)
 
 print("Dataset created → normal_dataset.csv")

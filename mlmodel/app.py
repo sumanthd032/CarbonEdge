@@ -1,9 +1,10 @@
 # app.py
-# Usage: uvicorn app:app --reload --host 0.0.0.0 --port 8000
+# Usage: uvicorn app:app --reloa                                                                                                                                                                                                                                                                                 --host 0.0.0.0 --port 8000
 
 import asyncio
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import numpy as np
 import joblib
@@ -25,12 +26,36 @@ ROLLING_WINDOW = 30   # Rolling window for statistics
 
 app = FastAPI(title="CarbonEdge AI Realtime API")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Load model, scaler, meta
 if not os.path.exists(MODEL_DIR):
     raise RuntimeError("Model directory not found. Run train_model.py first.")
 
 print("Loading model and artifacts...")
-ae = tf.keras.models.load_model(os.path.join(MODEL_DIR, 'ae_model'))
+try:
+    # Try standard loading (works for Keras 2 / Legacy H5)
+    ae = tf.keras.models.load_model(os.path.join(MODEL_DIR, 'ae_model'))
+except (ValueError, TypeError):
+    # Fallback for Keras 3 which doesn't support direct SavedModel loading
+    print("Using Keras 3 TFSMLayer fallback...")
+    class AEWrapper:
+        def __init__(self, path):
+            self.layer = tf.keras.layers.TFSMLayer(path, call_endpoint='serving_default')
+        
+        def predict(self, x, verbose=0):
+            # TFSMLayer returns a dict of tensors
+            out = self.layer(x)
+            # Return the first output value converted to numpy
+            return list(out.values())[0].numpy()
+            
+    ae = AEWrapper(os.path.join(MODEL_DIR, 'ae_model'))
 scaler = joblib.load(os.path.join(MODEL_DIR, 'scaler.pkl'))
 
 with open(os.path.join(MODEL_DIR, 'meta.json')) as f:
@@ -43,6 +68,10 @@ THRESHOLD = meta['threshold']
 # Sliding buffers per plant
 buffers = {'plant_1': deque(maxlen=SEQUENCE_BUFFER)}
 anomaly_history = {'plant_1': deque(maxlen=ROLLING_WINDOW)}
+
+# Global state for health check and latest status
+latest_predictions = {}
+latest_sensor_values = {}
 
 # ---------------- WebSocket Manager ----------------
 
@@ -226,6 +255,12 @@ async def ingest(row: SensorRow):
         row_scaled = preprocess_row(row.values)
         buffers[plant].append(row_scaled)
         
+        # Store latest raw values for health check
+        latest_sensor_values[plant] = {
+            "timestamp": row.timestamp,
+            "values": row.values
+        }
+        
         # Build sequence (with padding if needed)
         seq = sequence_from_buffer(buffers[plant])
         
@@ -258,6 +293,7 @@ async def ingest(row: SensorRow):
             recommendation = generate_recommendation(severity, top_sensors, root_cause)
         
         # Build response
+        is_complete = len(buffers[plant]) >= SEQ_LEN
         analytics = {
             "plant_id": plant,
             "timestamp": row.timestamp,
@@ -276,8 +312,12 @@ async def ingest(row: SensorRow):
             "recommendation": recommendation,
             "buffer_len": len(buffers[plant]),
             "history_len": len(anomaly_history[plant]),
-            "sequence_complete": len(buffers[plant]) >= SEQ_LEN
+            "sequence_complete": is_complete,
+            "buffer_filled": is_complete # Flutter compatibility
         }
+        
+        # Store in global state
+        latest_predictions[plant] = analytics
         
         # Broadcast to WebSocket clients
         event = {"type": "prediction", **analytics}
@@ -322,7 +362,7 @@ async def websocket_endpoint(ws: WebSocket):
 
 @app.get("/health")
 def health():
-    """Health check endpoint"""
+    """Health check endpoint with latest predictions"""
     return {
         "status": "ok",
         "model_loaded": True,
@@ -331,7 +371,9 @@ def health():
         "threshold": THRESHOLD,
         "columns": COLUMNS,
         "num_features": len(COLUMNS),
-        "mode": "real-time"
+        "mode": "real-time",
+        "latest_predictions": latest_predictions,
+        "latest_sensor_values": latest_sensor_values
     }
 
 # ---------------- Status Endpoint ----------------

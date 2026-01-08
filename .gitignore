@@ -1,3 +1,16 @@
+# Python
+venv/
+mlmodel/venv/
+__pycache__/
+*.pyc
+
+# ML artifacts (optional but recommended)
+*.h5
+*.onnx
+*.pkl
+
+
+
 # Miscellaneous
 *.class
 *.log

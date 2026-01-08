@@ -74,7 +74,7 @@ def generate_kiln_dataset_high_anomaly(rows=10000, anomaly_rate=0.20):
     return df
 
 
-df = generate_kiln_dataset_high_anomaly(rows=10000, anomaly_rate=0.30)
-df.to_csv("heavy_anomaly.csv", index=False)
+df = generate_kiln_dataset_high_anomaly(rows=10000, anomaly_rate=0.10)
+df.to_csv("anomaly.csv", index=False)
 
-print("High-anomaly dataset created → heavy_anomaly.csv")
+print("Moderate-anomaly dataset created → anomaly.csv")

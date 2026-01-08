@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:carbonedge/data/machine_data.dart';
 import 'package:carbonedge/services/kiln_service.dart';
 import 'package:carbonedge/services/machine_simulation_service.dart';
+import 'package:carbonedge/services/simulation_state.dart';
 import 'package:carbonedge/theme/app_theme.dart';
 import 'package:carbonedge/widgets/dashboard_right_panel.dart';
 import 'package:carbonedge/widgets/kpi_card.dart';
@@ -42,6 +43,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _kilnService.connect();
     _subscription = _kilnService.dataStream.listen(
       (data) {
+        if (!SimulationState.isConnected) return;
         // print("WebSocket Data: $data"); // Debugging
         if (mounted) {
           // Only update state if we have valid sensor data
@@ -55,8 +57,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               });
             }
           }
-          // If the data doesn't contain the expected structure, we simply ignore it
-          // and keep the last known good values.
         }
       },
       onError: (err) {
@@ -65,7 +65,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      _updateData();
+      if (SimulationState.isConnected) {
+        _updateData();
+      } else {
+        setState(() {}); // Still rebuild to check connection state
+      }
     });
   }
 
@@ -87,8 +91,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _pressureSpots.clear();
     _xValue = 0;
 
-    // Seed random based on machine name length to give deterministic but different starting points
-    int seed = machineName.length;
+    // Use hashCode to give distinct starting points for same-length names (Kiln A, B, C)
+    int seed = machineName.hashCode % 100;
 
     for (int i = 0; i < 30; i++) {
       double energy = 40 + sin(i * 0.2 + seed) * 10 + _random.nextDouble() * 5;
@@ -111,8 +115,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     setState(() {
       _xValue += 1;
-      // Add some variation based on selected machine
-      double offset = _selectedMachine.length.toDouble();
+      // Use hashCode for unique variation
+      double offset = (_selectedMachine.hashCode % 100).toDouble();
       double energy =
           40 + sin(_xValue * 0.2 + offset) * 10 + _random.nextDouble() * 5;
       double fuel =
@@ -356,11 +360,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         },
       ];
     } else if (machineName.contains("Kiln")) {
-      double tempBase = 1000 + (random.nextInt(5) * 200).toDouble();
+      final random = Random(machineName.hashCode);
       return [
         {
-          "title": "Kiln Temperature",
-          "value": (tempBase + random.nextInt(150)).toString(),
+          "title": "Kiln Temp",
+          "value": (1000 + random.nextInt(300)).toString(),
           "unit": "°C",
           "trend": getTrend(),
           "isPositive": getPos(),
@@ -395,13 +399,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
           "color": AppTheme.neonGreen,
         },
         {
-          "title": "Clinker Output",
-          "value": (150 + random.nextInt(50)).toString(),
-          "unit": "t/hr",
+          "title": "Outlet Pressure",
+          "value": (10 + random.nextInt(20)).toString(),
+          "unit": "Pa",
           "trend": getTrend(),
           "isPositive": getPos(),
-          "icon": Icons.precision_manufacturing,
+          "icon": Icons.compress,
+          "color": AppTheme.neonGreen,
+        },
+        {
+          "title": "Power Factor",
+          "value": (0.85 + random.nextDouble() * 0.1).toStringAsFixed(2),
+          "unit": "",
+          "trend": getTrend(),
+          "isPositive": getPos(),
+          "icon": Icons.electric_bolt,
+          "color": AppTheme.neonCyan,
+        },
+        {
+          "title": "Shell Temp",
+          "value": (250 + random.nextInt(100)).toString(),
+          "unit": "°C",
+          "trend": getTrend(),
+          "isPositive": getPos(),
+          "icon": Icons.thermostat_auto,
           "color": AppTheme.neonOrange,
+        },
+        {
+          "title": "Grate Speed",
+          "value": (4 + random.nextDouble() * 2).toStringAsFixed(1),
+          "unit": "m/min",
+          "trend": getTrend(),
+          "isPositive": getPos(),
+          "icon": Icons.conveyor_belt,
+          "color": AppTheme.neonCyan,
         },
       ];
     } else if (machineName.contains("Motor")) {
@@ -485,13 +516,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           mainAxisSpacing: 16,
           childAspectRatio: ratio,
           children: kpis.map((kpi) {
+            final isConnected = SimulationState.isConnected;
             return KPICard(
               title: kpi["title"],
-              value: kpi["value"],
-              unit: kpi["unit"],
-              trend: kpi["trend"],
+              value: isConnected ? kpi["value"] : "---",
+              unit: isConnected ? kpi["unit"] : "",
+              trend: isConnected ? kpi["trend"] : "-",
               isPositiveTrend: kpi["isPositive"],
-              accentColor: kpi["color"],
+              accentColor: isConnected
+                  ? kpi["color"]
+                  : Colors.grey.withOpacity(0.3),
               icon: kpi["icon"],
               isWeb: isWide,
             );
@@ -502,6 +536,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildMainChart({bool isWide = false}) {
+    if (!SimulationState.isConnected) {
+      return NeonCard(
+        child: SizedBox(
+          height: 400,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.show_chart,
+                  color: AppTheme.neonCyan.withValues(alpha: 0.3),
+                  size: 64,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  "Connection Required",
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "Connect simulation to view real-time analysis",
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return NeonCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -607,6 +675,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildSecondaryCharts() {
+    if (!SimulationState.isConnected) {
+      return NeonCard(
+        child: SizedBox(
+          height: 300,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.pie_chart,
+                  color: AppTheme.neonCyan.withValues(alpha: 0.3),
+                  size: 48,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  "Detailed Metrics Locked",
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  "Connect to reveal performance breakdowns",
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         bool isWide = constraints.maxWidth > 800;

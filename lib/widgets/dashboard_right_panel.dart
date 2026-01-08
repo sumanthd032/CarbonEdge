@@ -43,47 +43,49 @@ class _DashboardRightPanelState extends State<DashboardRightPanel>
                 left: BorderSide(color: AppTheme.surfaceLight, width: 1),
               ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(),
-          const SizedBox(height: 20),
-          _buildAlertCard(
-            title: "Temperature drift\non Kiln B",
-            subtitle: "2 mins ago",
-            color: AppTheme.neonOrange,
-            icon: Icons.thermostat,
-            isSelected: true,
-          ),
-          _buildAlertCard(
-            title: "Excess vibration\nMotor 7",
-            subtitle: "15 mins ago",
-            color: AppTheme.neonRed,
-            icon: Icons.vibration,
-            isSelected: false,
-          ),
-          _buildAlertCard(
-            title: "Airflow deviation\nFurnace Line 2",
-            subtitle: "42 mins ago",
-            color: AppTheme.neonCyan,
-            icon: Icons.air,
-            isSelected: false,
-          ),
-          const SizedBox(height: 32),
-          const Divider(color: AppTheme.surfaceLight),
-          const SizedBox(height: 24),
-          const Text(
-            "Efficiency KPIs",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(),
+            const SizedBox(height: 20),
+            _buildAlertCard(
+              title: "Temperature drift\non Kiln B",
+              subtitle: "2 mins ago",
+              color: AppTheme.neonOrange,
+              icon: Icons.thermostat,
+              isSelected: true,
             ),
-          ),
-          const SizedBox(height: 16),
-          _buildEnergyWasteCard(),
-          _buildCo2Card(),
-        ],
+            _buildAlertCard(
+              title: "Excess vibration\nMotor 7",
+              subtitle: "15 mins ago",
+              color: AppTheme.neonRed,
+              icon: Icons.vibration,
+              isSelected: false,
+            ),
+            _buildAlertCard(
+              title: "Airflow deviation\nFurnace Line 2",
+              subtitle: "42 mins ago",
+              color: AppTheme.neonCyan,
+              icon: Icons.air,
+              isSelected: false,
+            ),
+            const SizedBox(height: 32),
+            const Divider(color: AppTheme.surfaceLight),
+            const SizedBox(height: 24),
+            const Text(
+              "Efficiency KPIs",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildEnergyWasteCard(),
+            _buildCo2Card(),
+          ],
+        ),
       ),
     );
   }
@@ -322,11 +324,14 @@ class _DashboardRightPanelState extends State<DashboardRightPanel>
             children: [
               const Icon(Icons.eco, color: AppTheme.neonCyan, size: 16),
               const SizedBox(width: 8),
-              const Text(
-                "CO₂ Reduction",
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+              const Expanded(
+                child: Text(
+                  "CO₂ Reduction",
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Text(
                 "85 Tons",
                 style: TextStyle(

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -164,7 +163,7 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
   @override
   void initState() {
     super.initState();
-    _wsService = WebSocketService('ws://10.236.96.173:8000/ws');
+    _wsService = WebSocketService('ws://192.168.177.91:8000/ws');
 
     // Subscribe FIRST to avoid missing events
     _subscription = _wsService.stream.listen(
@@ -194,7 +193,7 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
 
     // Connect AFTER subscribing
     _wsService.connect();
-    
+
     // Safety timeout
     Future.delayed(const Duration(seconds: 10), () {
       if (mounted && _currentPrediction == null && _error == null) {
@@ -325,12 +324,7 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      flex: 1,
-                      child: SingleChildScrollView(
-                        child: _buildAIColumn(prediction),
-                      ),
-                    ),
+                    Expanded(flex: 1, child: _buildAIColumn(prediction)),
                     const SizedBox(width: 24),
                     Expanded(
                       flex: 1,
@@ -368,29 +362,31 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        NeonPanel(
-          title: 'AI DIAGNOSTICS',
-          icon: Icons.psychology,
-          color: NeonTheme.orange,
-          expand: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildDetailRow(
-                "ROOT CAUSE",
-                prediction.rootCause,
-                NeonTheme.red,
-              ),
-              const SizedBox(height: 16),
-              _buildDetailRow(
-                "RECOMMENDATION",
-                prediction.recommendation,
-                NeonTheme.lime,
-              ),
-            ],
+        Expanded(
+          child: NeonPanel(
+            title: 'AI DIAGNOSTICS',
+            icon: Icons.psychology,
+            color: NeonTheme.orange,
+            expand: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildDetailRow(
+                  "ROOT CAUSE",
+                  prediction.rootCause,
+                  NeonTheme.red,
+                ),
+                const SizedBox(height: 12),
+                _buildDetailRow(
+                  "RECOMMENDATION",
+                  prediction.recommendation,
+                  NeonTheme.lime,
+                ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
         _buildActionButtons(),
       ],
     );
@@ -409,12 +405,10 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
           ? Center(
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 40),
+                padding: const EdgeInsets.symmetric(vertical: 24),
                 decoration: BoxDecoration(
                   color: NeonTheme.lime.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(
-                    30,
-                  ), // Match button style if possible, or standard radius
+                  borderRadius: BorderRadius.circular(30),
                   border: Border.all(color: NeonTheme.lime),
                 ),
                 child: Column(
@@ -423,16 +417,19 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
                     const Icon(
                       Icons.check_circle_outline,
                       color: NeonTheme.lime,
-                      size: 48,
+                      size: 32,
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      "SYSTEM STATUS NORMAL",
-                      style: GoogleFonts.inter(
-                        color: NeonTheme.lime,
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.5,
+                    const SizedBox(height: 12),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        "SYSTEM STATUS NORMAL",
+                        style: GoogleFonts.inter(
+                          color: NeonTheme.lime,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
                       ),
                     ),
                   ],
@@ -440,9 +437,11 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
               ),
             )
           : Center(
-              child: SensorImpactBars(
-                causes: prediction.topCauses,
-                isNormal: isNormal,
+              child: SingleChildScrollView(
+                child: SensorImpactBars(
+                  causes: prediction.topCauses,
+                  isNormal: isNormal,
+                ),
               ),
             ),
     );
@@ -474,36 +473,38 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
               ),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
-            flex: 3,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  GlowingMetricCard(
+            flex: 5,
+            child: Row(
+              children: [
+                Expanded(
+                  child: GlowingMetricCard(
                     label: "CONFIDENCE",
                     value: "${prediction.confidence.toStringAsFixed(1)}%",
                     icon: Icons.verified_user,
                     color: NeonTheme.cyan,
                   ),
-                  const SizedBox(height: 12),
-                  GlowingMetricCard(
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GlowingMetricCard(
                     label: "STABILITY",
                     value: "${prediction.stability.toStringAsFixed(1)}%",
                     icon: Icons.balance,
                     color: NeonTheme.lime,
                   ),
-                  const SizedBox(height: 12),
-                  GlowingMetricCard(
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GlowingMetricCard(
                     label: "ROLLING AVG",
                     value: prediction.rollingAvg.toStringAsFixed(3),
                     icon: Icons.trending_up,
                     color: NeonTheme.orange,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],
@@ -584,19 +585,21 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
           label,
           style: GoogleFonts.inter(
             color: color,
-            fontSize: 18,
+            fontSize: 12,
             fontWeight: FontWeight.bold,
             letterSpacing: 1.0,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Text(
           value,
           style: GoogleFonts.inter(
             color: NeonTheme.textMain,
-            fontSize: 16,
+            fontSize: 12,
             fontWeight: FontWeight.w500,
           ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );
@@ -612,7 +615,7 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
             style: ElevatedButton.styleFrom(
               backgroundColor: NeonTheme.lime.withOpacity(0.2),
               foregroundColor: NeonTheme.lime,
-              padding: const EdgeInsets.symmetric(vertical: 20),
+              padding: const EdgeInsets.symmetric(vertical: 16),
               side: const BorderSide(color: NeonTheme.lime),
             ),
             onPressed: () {},
@@ -626,7 +629,7 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
             style: ElevatedButton.styleFrom(
               backgroundColor: NeonTheme.red.withOpacity(0.2),
               foregroundColor: NeonTheme.red,
-              padding: const EdgeInsets.symmetric(vertical: 20),
+              padding: const EdgeInsets.symmetric(vertical: 16),
               side: const BorderSide(color: NeonTheme.red),
             ),
             onPressed: () {},
@@ -1025,43 +1028,46 @@ class GlowingMetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white10),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               color: color.withOpacity(0.2),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: color, size: 20),
+            child: Icon(icon, color: color, size: 16),
           ),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  color: NeonTheme.textDim,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                ),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: GoogleFonts.inter(
+                color: NeonTheme.textDim,
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
               ),
-              Text(
-                value,
-                style: GoogleFonts.inter(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
               ),
-            ],
+            ),
           ),
         ],
       ),
@@ -1070,4 +1076,3 @@ class GlowingMetricCard extends StatelessWidget {
 }
 
 //Sohan Merged
-

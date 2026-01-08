@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:carbonedge/services/simulation_state.dart';
 import 'package:carbonedge/theme/app_theme.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -7,9 +8,10 @@ import 'package:http/http.dart' as http;
 
 // Global configuration
 class AlertConfig {
-  static const String apiBaseUrl = 'http://10.236.96.173:8000';
+  static const String apiBaseUrl = 'http://192.168.177.91:8000';
   // For hackathon: anomaly must persist for 3 seconds
   static const Duration anomalyDuration = Duration(seconds: 3);
+  static const Duration coolDownDuration = Duration(seconds: 12);
   static const Duration pollInterval = Duration(seconds: 1);
   static const int maxAlerts = 100;
 }
@@ -29,7 +31,9 @@ class _AlertsScreenState extends State<AlertsScreen> {
   Timer? _pollTimer;
   bool _isPolling = false;
   String _connectionStatus = 'Disconnected';
+  String? _processError;
   DateTime? _lastDataReceived;
+  DateTime? _lastAlertTime;
 
   // Anomaly tracking with timestamps
   final Map<String, AnomalyTracker> _anomalyTrackers = {};
@@ -39,17 +43,6 @@ class _AlertsScreenState extends State<AlertsScreen> {
     "High": true,
     "Medium": true,
     "Low": true,
-  };
-
-  final Map<String, bool> _sensorFilters = {
-    "Kilns": true,
-    "Furnaces": false,
-    "Vibration": true,
-    "Pressure": false,
-    "Compressors": false,
-    "Airflow": false,
-    "Load": false,
-    "Mills": false,
   };
 
   @override
@@ -72,7 +65,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   Future<void> _fetchHealthData() async {
-    if (_isPolling) return;
+    if (_isPolling || !SimulationState.isConnected) return;
     _isPolling = true;
 
     try {
@@ -86,9 +79,17 @@ class _AlertsScreenState extends State<AlertsScreen> {
         setState(() {
           _connectionStatus = 'Connected';
           _lastDataReceived = DateTime.now();
+          _processError = null;
         });
 
-        _processHealthData(data);
+        try {
+          _processHealthData(data);
+        } catch (e) {
+          setState(() {
+            _processError = 'Processing Error: $e';
+          });
+          print('Processing error: $e');
+        }
       } else {
         setState(() {
           _connectionStatus = 'Error: ${response.statusCode}';
@@ -105,14 +106,17 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   void _processHealthData(Map<String, dynamic> data) {
-    if (data['latest_predictions'] == null) return;
+    final predictionsRaw = data['latest_predictions'];
+    if (predictionsRaw == null || predictionsRaw is! Map) return;
 
-    final predictions = data['latest_predictions'] as Map<String, dynamic>;
+    final predictions = Map<String, dynamic>.from(predictionsRaw);
 
     for (var entry in predictions.entries) {
       final plantId = entry.key;
-      final prediction = entry.value as Map<String, dynamic>;
+      final predictionRaw = entry.value;
+      if (predictionRaw == null || predictionRaw is! Map) continue;
 
+      final prediction = Map<String, dynamic>.from(predictionRaw);
       _trackAnomaly(plantId, prediction, data);
     }
   }
@@ -122,8 +126,13 @@ class _AlertsScreenState extends State<AlertsScreen> {
   /// - Must persist for 3 seconds (AlertConfig.anomalyDuration)
   /// - Creates multiple alerts for long anomalies (one per 3s window)
   void _trackAnomaly(
-      String plantId, Map<String, dynamic> prediction, Map<String, dynamic> healthData) {
-    final rawSeverity = (prediction['severity'] ?? 'normal').toString().toLowerCase();
+    String plantId,
+    Map<String, dynamic> prediction,
+    Map<String, dynamic> healthData,
+  ) {
+    final rawSeverity = (prediction['severity'] ?? 'normal')
+        .toString()
+        .toLowerCase();
     final isAbnormal = rawSeverity != 'normal';
 
     // Initialize tracker if it doesn't exist
@@ -145,12 +154,15 @@ class _AlertsScreenState extends State<AlertsScreen> {
         final duration = DateTime.now().difference(tracker.startTime!);
 
         if (duration >= AlertConfig.anomalyDuration) {
-          // Create an alert for this sustained anomaly
-          _createAlert(plantId, prediction, healthData, duration);
+          final now = DateTime.now();
+          if (_lastAlertTime == null ||
+              now.difference(_lastAlertTime!) >= AlertConfig.coolDownDuration) {
+            _createAlert(plantId, prediction, healthData, duration);
+            _lastAlertTime = now;
 
-          // Restart tracking so that another alert can fire
-          // after another 3 seconds of continuous anomaly
-          tracker.startTracking(DateTime.now(), prediction);
+            // Restart tracking after firing
+            tracker.startTracking(now, prediction);
+          }
         }
       }
     } else {
@@ -159,8 +171,12 @@ class _AlertsScreenState extends State<AlertsScreen> {
     }
   }
 
-  void _createAlert(String plantId, Map<String, dynamic> prediction,
-      Map<String, dynamic> healthData, Duration duration) {
+  void _createAlert(
+    String plantId,
+    Map<String, dynamic> prediction,
+    Map<String, dynamic> healthData,
+    Duration duration,
+  ) {
     final severity = _mapSeverity(prediction['severity'] ?? 'normal');
     final anomalyScore = (prediction['raw_anomaly_score'] ?? 0.0).toDouble();
     final confidence = (prediction['confidence'] ?? 0.0).toDouble();
@@ -180,13 +196,19 @@ class _AlertsScreenState extends State<AlertsScreen> {
     // Get sensor values
     String sensorValuesLog = '';
     if (healthData['latest_sensor_values'] != null) {
-      final sensorData = healthData['latest_sensor_values'][plantId];
-      if (sensorData != null && sensorData['values'] != null) {
-        final values = sensorData['values'] as Map<String, dynamic>;
-        sensorValuesLog = values.entries
-            .take(5)
-            .map((e) => '${e.key}: ${(e.value as num).toStringAsFixed(2)}')
-            .join('\n');
+      final latestSensors = healthData['latest_sensor_values'];
+      if (latestSensors is Map && latestSensors.containsKey(plantId)) {
+        final sensorData = latestSensors[plantId];
+        if (sensorData != null && sensorData['values'] != null) {
+          final values = sensorData['values'] as Map<String, dynamic>;
+          sensorValuesLog = values.entries
+              .take(5)
+              .map(
+                (e) =>
+                    '${e.key}: ${(e.value as num?)?.toStringAsFixed(2) ?? 'N/A'}',
+              )
+              .join('\n');
+        }
       }
     }
 
@@ -203,13 +225,15 @@ class _AlertsScreenState extends State<AlertsScreen> {
           ? topCausesDetail
           : "Pattern detected by AI model - threshold: ${(healthData['threshold'] as num).toStringAsFixed(2)}",
       "action":
-      prediction['recommendation'] ?? 'Monitor system closely and investigate',
+          prediction['recommendation'] ??
+          'Monitor system closely and investigate',
       "additionalActions": [
         "Review sensor trends for the past hour",
         "Check maintenance logs for recent work",
         "Verify calibration of top contributing sensors",
       ],
-      "eventLog": "Auto-generated alert for persistent anomaly\n"
+      "eventLog":
+          "Auto-generated alert for persistent anomaly\n"
           "Duration: ${duration.inSeconds} seconds\n"
           "Anomaly Score: ${anomalyScore.toStringAsFixed(3)}\n"
           "Threshold: ${(healthData['threshold'] as num).toStringAsFixed(3)}\n"
@@ -242,8 +266,6 @@ class _AlertsScreenState extends State<AlertsScreen> {
     // Show notification
     // _showAlertNotification(newAlert);
   }
-
-
 
   void _deleteAlert(int index) {
     setState(() {
@@ -308,9 +330,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
         return Column(
           children: [
             _buildStatusBar(),
-            Expanded(
-              child: isWide ? _buildWideLayout() : _buildNarrowLayout(),
-            ),
+            Expanded(child: isWide ? _buildWideLayout() : _buildNarrowLayout()),
           ],
         );
       },
@@ -318,8 +338,9 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   Widget _buildStatusBar() {
-    final statusColor =
-    _connectionStatus == 'Connected' ? AppTheme.neonCyan : AppTheme.neonRed;
+    final statusColor = _connectionStatus == 'Connected'
+        ? AppTheme.neonCyan
+        : AppTheme.neonRed;
 
     final timeSinceUpdate = _lastDataReceived != null
         ? DateTime.now().difference(_lastDataReceived!)
@@ -371,6 +392,19 @@ class _AlertsScreenState extends State<AlertsScreen> {
               ),
             ),
           ],
+          if (_processError != null) ...[
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                _processError!,
+                style: const TextStyle(
+                  color: AppTheme.neonOrange,
+                  fontSize: 11,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
           const Spacer(),
           Text(
             'Active Alerts: ${_filteredAlerts.length}',
@@ -391,15 +425,9 @@ class _AlertsScreenState extends State<AlertsScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 260,
-            child: _buildFiltersPanel(),
-          ),
+          SizedBox(width: 260, child: _buildFiltersPanel()),
           const SizedBox(width: 20),
-          Expanded(
-            flex: 2,
-            child: _buildAlertList(),
-          ),
+          Expanded(flex: 2, child: _buildAlertList()),
           const SizedBox(width: 20),
           Expanded(
             flex: 2,
@@ -460,13 +488,16 @@ class _AlertsScreenState extends State<AlertsScreen> {
             const SizedBox(height: 24),
             if (_connectionStatus != 'Connected')
               Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: AppTheme.neonRed.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
-                      color: AppTheme.neonRed.withValues(alpha: 0.3)),
+                    color: AppTheme.neonRed.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -520,13 +551,25 @@ class _AlertsScreenState extends State<AlertsScreen> {
               runSpacing: 8,
               children: [
                 _buildFilterChip(
-                    "Critical", AppTheme.neonRed, _severityFilters["Critical"]!),
-                _buildFilterChip("High", AppTheme.neonOrange,
-                    _severityFilters["High"]!),
-                _buildFilterChip("Medium", Colors.yellow.shade700,
-                    _severityFilters["Medium"]!),
+                  "Critical",
+                  AppTheme.neonRed,
+                  _severityFilters["Critical"]!,
+                ),
                 _buildFilterChip(
-                    "Low", AppTheme.neonCyan, _severityFilters["Low"]!),
+                  "High",
+                  AppTheme.neonOrange,
+                  _severityFilters["High"]!,
+                ),
+                _buildFilterChip(
+                  "Medium",
+                  Colors.yellow.shade700,
+                  _severityFilters["Medium"]!,
+                ),
+                _buildFilterChip(
+                  "Low",
+                  AppTheme.neonCyan,
+                  _severityFilters["Low"]!,
+                ),
               ],
             ),
             const SizedBox(height: 24),
@@ -564,7 +607,9 @@ class _AlertsScreenState extends State<AlertsScreen> {
           color: isActive ? color.withValues(alpha: 0.15) : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isActive ? color : AppTheme.surfaceLight.withValues(alpha: 0.3),
+            color: isActive
+                ? color
+                : AppTheme.surfaceLight.withValues(alpha: 0.3),
             width: 1.5,
           ),
         ),
@@ -581,6 +626,46 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   Widget _buildAlertList() {
+    if (!SimulationState.isConnected) {
+      return Container(
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceDark,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppTheme.surfaceLight.withValues(alpha: 0.3),
+          ),
+        ),
+        padding: const EdgeInsets.all(40),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.link_off,
+                color: AppTheme.neonOrange.withValues(alpha: 0.5),
+                size: 64,
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Simulation Disconnected',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Please click "Connect Model" in the simulation popup to begin receiving alerts.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final filteredAlerts = _filteredAlerts;
 
     return Container(
@@ -611,7 +696,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
               child: ListView.separated(
                 itemCount: filteredAlerts.length,
                 separatorBuilder: (context, index) =>
-                const SizedBox(height: 12),
+                    const SizedBox(height: 12),
                 itemBuilder: (context, index) {
                   return _buildAlertCard(filteredAlerts[index], index);
                 },
@@ -765,7 +850,9 @@ class _AlertsScreenState extends State<AlertsScreen> {
         color: AppTheme.surfaceDark,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: AppTheme.neonOrange.withValues(alpha: 0.6), width: 1.5),
+          color: AppTheme.neonOrange.withValues(alpha: 0.6),
+          width: 1.5,
+        ),
       ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -787,8 +874,10 @@ class _AlertsScreenState extends State<AlertsScreen> {
                   ),
                 ),
                 Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: severityColor,
                     borderRadius: BorderRadius.circular(6),
@@ -865,8 +954,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
             const SizedBox(height: 12),
             Container(
               width: double.infinity,
-              padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: AppTheme.background,
                 borderRadius: BorderRadius.circular(8),
@@ -900,7 +988,9 @@ class _AlertsScreenState extends State<AlertsScreen> {
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 14),
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                     decoration: BoxDecoration(
                       color: AppTheme.background,
                       borderRadius: BorderRadius.circular(8),
@@ -1058,7 +1148,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
                             final index = value.toInt();
                             if (index >= 0 && index < topCauses.length) {
                               final sensor =
-                              topCauses[index]["sensor"] as String;
+                                  topCauses[index]["sensor"] as String;
                               final shortName = sensor.split('_').first;
                               return Padding(
                                 padding: const EdgeInsets.only(top: 4.0),
@@ -1156,22 +1246,18 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   Widget _buildActionButton(
-      String label,
-      Color color, {
-        bool enabled = true,
-        VoidCallback? onPressed,
-      }) {
+    String label,
+    Color color, {
+    bool enabled = true,
+    VoidCallback? onPressed,
+  }) {
     return OutlinedButton(
       onPressed: enabled ? onPressed : null,
       style: OutlinedButton.styleFrom(
-        side: BorderSide(
-          color: enabled ? color : color.withValues(alpha: 0.3),
-        ),
+        side: BorderSide(color: enabled ? color : color.withValues(alpha: 0.3)),
         foregroundColor: enabled ? color : color.withValues(alpha: 0.5),
         padding: const EdgeInsets.symmetric(vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       child: Text(
         label,
@@ -1198,13 +1284,13 @@ class _AlertsScreenState extends State<AlertsScreen> {
 class AnomalyTracker {
   DateTime? startTime;
   bool isTracking = false;
-  bool alertCreated = false; // kept for compatibility (not used now)
+  bool alertCreatedForThisPeriod = false;
   Map<String, dynamic>? lastPrediction;
 
   void startTracking(DateTime time, Map<String, dynamic> prediction) {
     startTime = time;
     isTracking = true;
-    alertCreated = false;
+    alertCreatedForThisPeriod = false;
     lastPrediction = prediction;
   }
 
@@ -1213,13 +1299,13 @@ class AnomalyTracker {
   }
 
   void markAlertCreated() {
-    alertCreated = true;
+    alertCreatedForThisPeriod = true;
   }
 
   void reset() {
     startTime = null;
     isTracking = false;
-    alertCreated = false;
+    alertCreatedForThisPeriod = false;
     lastPrediction = null;
   }
 }

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class KilnService {
-  static const String _wsUrl = 'ws://10.236.96.173:8000/ws';
+  static const String _wsUrl = 'ws://192.168.177.91:8000/ws';
   WebSocketChannel? _channel;
   final _controller = StreamController<Map<String, dynamic>>.broadcast();
 
@@ -13,7 +13,7 @@ class KilnService {
     try {
       print('Connecting to WebSocket: $_wsUrl');
       _channel = WebSocketChannel.connect(Uri.parse(_wsUrl));
-      
+
       _channel!.stream.listen(
         (data) {
           try {

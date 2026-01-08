@@ -1,3 +1,5 @@
+import 'dart:ui';
+import 'package:carbonedge/services/simulation_state.dart';
 import 'package:carbonedge/bottom_bar/ai_recommendations_screen.dart';
 import 'package:carbonedge/bottom_bar/alerts_screen.dart';
 import 'package:carbonedge/bottom_bar/connect_scada_screen.dart';
@@ -16,6 +18,8 @@ class MainHomeScreen extends StatefulWidget {
 
 class _MainHomeScreenState extends State<MainHomeScreen> {
   int _selectedIndex = 0;
+  bool _showSimulationPopup = true;
+  bool _isConnecting = false;
 
   static const List<Widget> _screens = <Widget>[
     DashboardScreen(),
@@ -42,6 +46,15 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        _buildMainScaffold(context),
+        if (_showSimulationPopup) _buildSimulationPopup(),
+      ],
+    );
+  }
+
+  Widget _buildMainScaffold(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWeb = constraints.maxWidth > 800;
@@ -194,6 +207,119 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSimulationPopup() {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          // Background Blur
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+            child: Container(color: Colors.black.withOpacity(0.5)),
+          ),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 500),
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.neonCyan, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.neonCyan.withOpacity(0.3),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      "Welcome to CarbonEdge",
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                        letterSpacing: 1.2,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      "CarbonEdge is designed to connect with real-time factory machines to analyze operational data using AI.\n\n"
+                      "Since live factory machines are not available during this demo, the app runs in Simulation Mode by default.\n\n"
+                      "In this mode, the system generates realistic, real-time machine data and processes it through the same AI model and pipeline used for real-world deployments.\n\n"
+                      "This allows you to experience the full functionality of CarbonEdge exactly as it would work in a live factory environment.",
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppTheme.textSecondary,
+                        height: 1.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 32),
+                    if (_isConnecting) ...[
+                      const CircularProgressIndicator(color: AppTheme.neonCyan),
+                      const SizedBox(height: 16),
+                      const Text(
+                        "Connecting to AI Model...",
+                        style: TextStyle(
+                          color: AppTheme.neonCyan,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ] else
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            setState(() {
+                              _isConnecting = true;
+                            });
+                            await Future.delayed(const Duration(seconds: 3));
+                            SimulationState.setConnected(true);
+                            if (mounted) {
+                              setState(() {
+                                _showSimulationPopup = false;
+                                _isConnecting = false;
+                              });
+                            }
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(
+                              color: AppTheme.neonCyan,
+                              width: 2,
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text(
+                            "Connect Model",
+                            style: TextStyle(
+                              color: AppTheme.neonCyan,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
