@@ -163,7 +163,7 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
   @override
   void initState() {
     super.initState();
-    _wsService = WebSocketService('ws://192.168.177.91:8000/ws');
+    _wsService = WebSocketService('ws://192.168.240.91:8000/ws');
 
     // Subscribe FIRST to avoid missing events
     _subscription = _wsService.stream.listen(

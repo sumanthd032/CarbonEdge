@@ -8,7 +8,7 @@ import 'package:http/http.dart' as http;
 
 // Global configuration
 class AlertConfig {
-  static const String apiBaseUrl = 'http://192.168.177.91:8000';
+  static const String apiBaseUrl = 'http://192.168.240.91:8000';
   // For hackathon: anomaly must persist for 3 seconds
   static const Duration anomalyDuration = Duration(seconds: 3);
   static const Duration coolDownDuration = Duration(seconds: 12);

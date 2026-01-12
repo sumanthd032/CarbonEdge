@@ -1,12 +1,12 @@
-import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:carbonedge/helpers/file_export_helper.dart';
 
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' as excel_lib;
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:open_file/open_file.dart';
-import 'package:path_provider/path_provider.dart';
-
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
@@ -30,13 +30,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     {'month': 'Apr', 'actual': 38.0, 'predicted': 37.0, 'target': 29.0},
     {'month': 'May', 'actual': 36.0, 'predicted': 35.0, 'target': 28.0},
     {'month': 'Jun', 'actual': 34.0, 'predicted': 34.0, 'target': 27.0},
-  ];
-
-  final List<Map<String, String>> pastReports = [
-    {'name': 'ESG Report – Sep 2025', 'type': 'PDF', 'size': '1.2 MB'},
-    {'name': 'AI Insights – Oct 2025', 'type': 'XLSX', 'size': '800 KB'},
-    {'name': 'Energy Savings - Q3 2025', 'type': 'PDF', 'size': '950 KB'},
-    {'name': 'Carbon Audit – 2025', 'type': 'PDF', 'size': '2.1 MB'},
   ];
 
   @override
@@ -80,7 +73,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
           const SizedBox(height: 40),
           _buildGenerateReportSection(),
           const SizedBox(height: 40),
-          _buildPastReportsList(),
         ],
       ),
     );
@@ -280,6 +272,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 "Quarterly Report",
                                 "Annual ESG Report",
                               ],
+                              (val) =>
+                                  setState(() => selectedReportType = val!),
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -293,24 +287,35 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 "Year to Date",
                                 "Custom Range",
                               ],
+                              (val) => setState(() => selectedDateRange = val!),
                             ),
                           ),
                         ],
                       )
                     : Column(
                         children: [
-                          _buildDropdown("Report Type", selectedReportType, [
-                            "Monthly Summary",
-                            "Quarterly Report",
-                            "Annual ESG Report",
-                          ]),
+                          _buildDropdown(
+                            "Report Type",
+                            selectedReportType,
+                            [
+                              "Monthly Summary",
+                              "Quarterly Report",
+                              "Annual ESG Report",
+                            ],
+                            (val) => setState(() => selectedReportType = val!),
+                          ),
                           const SizedBox(height: 16),
-                          _buildDropdown("Date Range", selectedDateRange, [
-                            "Last 7 Days",
-                            "Last 30 Days",
-                            "Year to Date",
-                            "Custom Range",
-                          ]),
+                          _buildDropdown(
+                            "Date Range",
+                            selectedDateRange,
+                            [
+                              "Last 7 Days",
+                              "Last 30 Days",
+                              "Year to Date",
+                              "Custom Range",
+                            ],
+                            (val) => setState(() => selectedDateRange = val!),
+                          ),
                         ],
                       );
               },
@@ -364,9 +369,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildDropdown(String label, String value, List<String> items) {
+  Widget _buildDropdown(
+    String label,
+    String value,
+    List<String> items,
+    ValueChanged<String?> onChanged,
+  ) {
     return DropdownButtonFormField<String>(
-      initialValue: value,
+      value: value,
       decoration: InputDecoration(
         labelText: label,
         border: const OutlineInputBorder(),
@@ -374,56 +384,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       items: items
           .map((e) => DropdownMenuItem(value: e, child: Text(e)))
           .toList(),
-      onChanged: (val) => setState(
-        () => val == "Monthly Summary"
-            ? selectedReportType = val!
-            : selectedDateRange = val!,
-      ),
-    );
-  }
-
-  Widget _buildPastReportsList() {
-    return Card(
-      elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "Past Reports",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            ...pastReports.map(
-              (report) => Column(
-                children: [
-                  ListTile(
-                    leading: Icon(
-                      report['type'] == 'PDF'
-                          ? Icons.picture_as_pdf
-                          : Icons.table_chart,
-                      color: Colors.grey[600],
-                    ),
-                    title: Text(
-                      report['name']!,
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    subtitle: Text("${report['type']} • ${report['size']}"),
-                    trailing: TextButton.icon(
-                      onPressed: () => _simulateDownload(report['name']!),
-                      icon: const Icon(Icons.download, size: 18),
-                      label: const Text("Download"),
-                    ),
-                  ),
-                  const Divider(height: 1),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+      onChanged: onChanged,
     );
   }
 
@@ -893,63 +854,77 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Future<void> _exportExcel() async {
-    var excel = excel_lib.Excel.createExcel();
-    excel_lib.Sheet sheet = excel['ESG Report'];
+    try {
+      var excel = excel_lib.Excel.createExcel();
+      excel_lib.Sheet sheet = excel['ESG Report'];
 
-    sheet.appendRow([
-      excel_lib.TextCellValue('Month'),
-      excel_lib.TextCellValue('Actual Emissions'),
-      excel_lib.TextCellValue('Predicted'),
-      excel_lib.TextCellValue('Target'),
-    ]);
-    for (var data in emissionsData) {
       sheet.appendRow([
-        excel_lib.TextCellValue(data['month']),
-        excel_lib.DoubleCellValue(data['actual']),
-        excel_lib.DoubleCellValue(data['predicted']),
-        excel_lib.DoubleCellValue(data['target']),
+        excel_lib.TextCellValue('Month'),
+        excel_lib.TextCellValue('Actual Emissions'),
+        excel_lib.TextCellValue('Predicted'),
+        excel_lib.TextCellValue('Target'),
       ]);
-    }
+      for (var data in emissionsData) {
+        sheet.appendRow([
+          excel_lib.TextCellValue(data['month'].toString()),
+          excel_lib.DoubleCellValue(data['actual'] as double),
+          excel_lib.DoubleCellValue(data['predicted'] as double),
+          excel_lib.DoubleCellValue(data['target'] as double),
+        ]);
+      }
 
-    final dir = await getTemporaryDirectory();
-    final file = File(
-      "${dir.path}/ESG_Report_${DateTime.now().millisecondsSinceEpoch}.xlsx",
-    );
-    file.writeAsBytesSync(excel.encode()!);
-    OpenFile.open(file.path);
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Excel file exported!")));
+      final bytes = excel.encode();
+      if (bytes == null) {
+        _showError("Failed to encode Excel file");
+        return;
+      }
+
+      await FileExportHelper.saveAndOpenFile(
+        bytes: Uint8List.fromList(bytes),
+        fileName: 'ESG_Report_${DateTime.now().millisecondsSinceEpoch}.xlsx',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Excel file exported!")));
+      }
+    } catch (e) {
+      _showError("Export failed: $e");
     }
   }
 
   Future<void> _exportCSV() async {
-    List<List<dynamic>> rows = [
-      ["Month", "Actual", "Predicted", "Target"],
-      ...emissionsData.map(
-        (e) => [e['month'], e['actual'], e['predicted'], e['target']],
-      ),
-    ];
+    try {
+      List<List<dynamic>> rows = [
+        ["Month", "Actual", "Predicted", "Target"],
+        ...emissionsData.map(
+          (e) => [e['month'], e['actual'], e['predicted'], e['target']],
+        ),
+      ];
 
-    String csv = const ListToCsvConverter().convert(rows);
-    final dir = await getTemporaryDirectory();
-    final file = File(
-      "${dir.path}/emissions_${DateTime.now().millisecondsSinceEpoch}.csv",
-    );
-    await file.writeAsString(csv);
-    OpenFile.open(file.path);
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("CSV exported!")));
+      String csv = const ListToCsvConverter().convert(rows);
+      final bytes = Uint8List.fromList(utf8.encode(csv));
+
+      await FileExportHelper.saveAndOpenFile(
+        bytes: bytes,
+        fileName: 'emissions_${DateTime.now().millisecondsSinceEpoch}.csv',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("CSV exported!")));
+      }
+    } catch (e) {
+      _showError("CSV export failed: $e");
     }
   }
 
-  void _simulateDownload(String name) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text("Downloading $name...")));
+  void _showError(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
+      );
+    }
   }
 }
 
