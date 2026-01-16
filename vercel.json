@@ -1,4 +1,6 @@
 {
+    "buildCommand": "./vercel-build.sh",
+    "outputDirectory": "build/web",
     "routes": [
         {
             "src": "/(.*)",
