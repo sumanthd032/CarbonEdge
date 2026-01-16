@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:carbonedge/services/simulation_state.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -90,7 +91,6 @@ class TopCause {
 class HardcodedDataSimulator {
   final _controller = StreamController<AIPrediction>.broadcast();
   Timer? _timer;
-  int _secondsElapsed = 0;
   final Random _random = Random();
 
   // Severity stability - only change every 20 seconds
@@ -99,13 +99,11 @@ class HardcodedDataSimulator {
   Stream<AIPrediction> get stream => _controller.stream;
 
   void connect() {
-    _secondsElapsed = _random.nextInt(80); // Start at random point in 80s cycle
     _currentSeverity = 'low';
     _timer?.cancel();
 
     // Emit data every 1 second
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      _secondsElapsed++;
       final prediction = _generatePrediction();
       _controller.add(prediction);
     });
@@ -116,14 +114,15 @@ class HardcodedDataSimulator {
 
   AIPrediction _generatePrediction() {
     final now = DateTime.now();
+    final seconds = SimulationState.currentSeconds;
+
     // Anomaly appears at 60 seconds and lasts until 80 seconds (20 second duration)
     // Then resets back to normal
-    final isAnomaly = _secondsElapsed >= 60 && _secondsElapsed < 80;
+    final isAnomaly = seconds >= 60 && seconds < 80;
 
-    // Reset counter after full cycle (80 seconds)
-    if (_secondsElapsed >= 80) {
-      _secondsElapsed = 0;
-      _currentSeverity = 'low';
+    // Severity stability logic reset (managed by global cycle)
+    if (seconds == 0) {
+      _currentSeverity = 'normal';
     }
 
     if (isAnomaly) {
@@ -134,16 +133,14 @@ class HardcodedDataSimulator {
   }
 
   AIPrediction _generateNormalPrediction(DateTime timestamp) {
-    // Range 0.15 - 0.30 for Low as requested
-    final anomalyScore =
-        0.15 + _random.nextDouble() * 0.15; // 0.15 - 0.30 (Low range)
+    final anomalyScore = SimulationState.getAnomalyScore('normal', _random);
     final confidence = 88.0 + _random.nextDouble() * 4.0;
     final stability = 92.0 + _random.nextDouble() * 4.0;
 
     return AIPrediction(
       plantId: 'cement_kiln_01',
       timestamp: _formatTimestamp(timestamp),
-      severity: 'low',
+      severity: 'normal',
       anomalyScore: anomalyScore,
       confidence: confidence,
       stability: stability,
@@ -171,20 +168,17 @@ class HardcodedDataSimulator {
   }
 
   AIPrediction _generateAnomalyPrediction(DateTime timestamp) {
-    // Anomaly score in range 0.70 - 0.98 to cover Warning and High (always > 0.7)
-    final anomalyScore = 0.70 + _random.nextDouble() * 0.28;
+    final targetSeverity = SimulationState.currentCycleSeverity;
+    final anomalyScore = SimulationState.getAnomalyScore(
+      targetSeverity,
+      _random,
+    );
     final confidence = 78.0 + _random.nextDouble() * 8.0;
     final stability = 65.0 + _random.nextDouble() * 8.0;
 
     // Stick to one severity for the duration of the anomaly
-    if (_currentSeverity == 'normal' || _currentSeverity == 'low') {
-      if (anomalyScore > 0.75) {
-        _currentSeverity = 'high';
-      } else if (anomalyScore > 0.5) {
-        _currentSeverity = 'warning';
-      } else {
-        _currentSeverity = 'low';
-      }
+    if (_currentSeverity == 'normal') {
+      _currentSeverity = targetSeverity;
     }
 
     return AIPrediction(

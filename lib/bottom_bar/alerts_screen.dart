@@ -62,7 +62,6 @@ class _AlertsScreenState extends State<AlertsScreen> {
     _fetchHealthData(); // Initial fetch
   }
 
-  int _secondsElapsed = Random().nextInt(80);
   String _currentSeverity = 'low';
   final Random _random = Random();
 
@@ -79,7 +78,6 @@ class _AlertsScreenState extends State<AlertsScreen> {
       });
 
       // Generate hardcoded data
-      _secondsElapsed++;
       final data = _generateHardcodedHealthData();
 
       try {
@@ -101,15 +99,16 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   Map<String, dynamic> _generateHardcodedHealthData() {
+    final seconds = SimulationState.currentSeconds;
+
     // Anomaly appears at 60 seconds and lasts until 80 seconds (20 second duration)
     // Then resets back to normal
-    final isAnomaly = _secondsElapsed >= 60 && _secondsElapsed < 80;
+    final isAnomaly = seconds >= 60 && seconds < 80;
     final threshold = 0.65;
 
     // Reset counter after full cycle (80 seconds)
-    if (_secondsElapsed >= 80) {
-      _secondsElapsed = 0;
-      _currentSeverity = 'low';
+    if (seconds == 0) {
+      _currentSeverity = 'normal';
     }
 
     if (isAnomaly) {
@@ -120,15 +119,13 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   Map<String, dynamic> _generateNormalHealthData(double threshold) {
-    // Range 0.3 - 0.5 for Low as requested
-    final anomalyScore =
-        0.15 + _random.nextDouble() * 0.15; // 0.15 - 0.30 (Low range)
+    final anomalyScore = SimulationState.getAnomalyScore('normal', _random);
 
     return {
       'threshold': threshold,
       'latest_predictions': {
         'cement_kiln_01': {
-          'severity': 'low',
+          'severity': 'normal',
           'raw_anomaly_score': anomalyScore,
           'confidence': 88.0 + _random.nextDouble() * 4.0,
           'stability': 92.0 + _random.nextDouble() * 4.0,
@@ -157,18 +154,15 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   Map<String, dynamic> _generateAnomalyHealthData(double threshold) {
-    // Range 0.70 - 0.98 to cover Warning and High (always > 0.7)
-    final anomalyScore = 0.70 + _random.nextDouble() * 0.28;
+    final targetSeverity = SimulationState.currentCycleSeverity;
+    final anomalyScore = SimulationState.getAnomalyScore(
+      targetSeverity,
+      _random,
+    );
 
     // Stick to one severity for the duration of the anomaly
-    if (_currentSeverity == 'normal' || _currentSeverity == 'low') {
-      if (anomalyScore > 0.75) {
-        _currentSeverity = 'high';
-      } else if (anomalyScore > 0.5) {
-        _currentSeverity = 'warning';
-      } else {
-        _currentSeverity = 'low';
-      }
+    if (_currentSeverity == 'normal') {
+      _currentSeverity = targetSeverity;
     }
 
     return {
@@ -177,17 +171,13 @@ class _AlertsScreenState extends State<AlertsScreen> {
         'cement_kiln_01': {
           'severity': _currentSeverity,
           'raw_anomaly_score': anomalyScore,
-          'confidence': 75.0 + _random.nextDouble() * 15.0,
-          'stability': 60.0 + _random.nextDouble() * 15.0,
-          'rolling_avg': 0.68 + _random.nextDouble() * 0.15,
-          'rolling_std': 0.12 + _random.nextDouble() * 0.08,
+          'confidence': 78.0 + _random.nextDouble() * 8.0,
+          'stability': 65.0 + _random.nextDouble() * 8.0,
+          'rolling_avg': 0.65 + _random.nextDouble() * 0.15,
+          'rolling_std': 0.05 + _random.nextDouble() * 0.05,
           'top_causes': [
             {
               'sensor': 'vibration_level',
-              'impact': 8.2 + _random.nextDouble() * 1.5,
-            },
-            {
-              'sensor': 'temperature_zone_3',
               'impact': 7.5 + _random.nextDouble() * 1.2,
             },
             {
@@ -197,6 +187,10 @@ class _AlertsScreenState extends State<AlertsScreen> {
             {
               'sensor': 'exhaust_co2',
               'impact': 5.9 + _random.nextDouble() * 0.8,
+            },
+            {
+              'sensor': 'temperature_zone_3',
+              'impact': 5.2 + _random.nextDouble() * 0.7,
             },
             {'sensor': 'feed_rate', 'impact': 4.5 + _random.nextDouble() * 0.7},
           ],
@@ -251,7 +245,12 @@ class _AlertsScreenState extends State<AlertsScreen> {
     final rawSeverity = (prediction['severity'] ?? 'normal')
         .toString()
         .toLowerCase();
-    final isAbnormal = rawSeverity != 'normal' && rawSeverity != 'low';
+
+    // Ignore baseline state
+    if (rawSeverity == 'normal') {
+      _anomalyTrackers[plantId]?.reset();
+      return;
+    }
 
     // Initialize tracker if it doesn't exist
     if (!_anomalyTrackers.containsKey(plantId)) {
@@ -260,32 +259,27 @@ class _AlertsScreenState extends State<AlertsScreen> {
 
     final tracker = _anomalyTrackers[plantId]!;
 
-    if (isAbnormal) {
-      if (!tracker.isTracking) {
-        // Start tracking this abnormal period
-        tracker.startTracking(DateTime.now(), prediction);
-      } else {
-        // Update existing tracking with latest prediction
-        tracker.updateTracking(prediction);
+    if (!tracker.isTracking) {
+      // Start tracking this abnormal period
+      tracker.startTracking(DateTime.now(), prediction);
+    } else {
+      // Update existing tracking with latest prediction
+      tracker.updateTracking(prediction);
 
-        // How long has this abnormal condition been going on?
-        final duration = DateTime.now().difference(tracker.startTime!);
+      // How long has this abnormal condition been going on?
+      final duration = DateTime.now().difference(tracker.startTime!);
 
-        if (duration >= AlertConfig.anomalyDuration) {
-          final now = DateTime.now();
-          if (_lastAlertTime == null ||
-              now.difference(_lastAlertTime!) >= AlertConfig.coolDownDuration) {
-            _createAlert(plantId, prediction, healthData, duration);
-            _lastAlertTime = now;
+      if (duration >= AlertConfig.anomalyDuration) {
+        final now = DateTime.now();
+        if (_lastAlertTime == null ||
+            now.difference(_lastAlertTime!) >= AlertConfig.coolDownDuration) {
+          _createAlert(plantId, prediction, healthData, duration);
+          _lastAlertTime = now;
 
-            // Restart tracking after firing
-            tracker.startTracking(now, prediction);
-          }
+          // Restart tracking after firing
+          tracker.startTracking(now, prediction);
         }
       }
-    } else {
-      // Back to normal -> reset tracking
-      tracker.reset();
     }
   }
 
