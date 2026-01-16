@@ -43,21 +43,18 @@ class _DashboardRightPanelState extends State<DashboardRightPanel> {
             const SizedBox(height: 20),
             _buildAlertCard(
               title: "Temperature drift\non Kiln B",
-              subtitle: "2 mins ago",
               color: AppTheme.neonOrange,
               icon: Icons.thermostat,
               isSelected: true,
             ),
             _buildAlertCard(
               title: "Excess vibration\nMotor 7",
-              subtitle: "15 mins ago",
               color: AppTheme.neonRed,
               icon: Icons.vibration,
               isSelected: false,
             ),
             _buildAlertCard(
               title: "Airflow deviation\nFurnace Line 2",
-              subtitle: "42 mins ago",
               color: AppTheme.neonCyan,
               icon: Icons.air,
               isSelected: false,
@@ -100,7 +97,6 @@ class _DashboardRightPanelState extends State<DashboardRightPanel> {
 
   Widget _buildAlertCard({
     required String title,
-    required String subtitle,
     required Color color,
     required IconData icon,
     required bool isSelected,
@@ -163,28 +159,6 @@ class _DashboardRightPanelState extends State<DashboardRightPanel> {
                           fontSize: isWeb ? 16 : 14,
                           height: 1.2,
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.access_time,
-                            size: isWeb ? 12 : 10,
-                            color: AppTheme.textSecondary.withValues(
-                              alpha: 0.7,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            subtitle,
-                            style: TextStyle(
-                              color: AppTheme.textSecondary.withValues(
-                                alpha: 0.7,
-                              ),
-                              fontSize: isWeb ? 13 : 11,
-                            ),
-                          ),
-                        ],
                       ),
                     ],
                   ),
