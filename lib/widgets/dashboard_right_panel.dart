@@ -11,22 +11,14 @@ class DashboardRightPanel extends StatefulWidget {
   State<DashboardRightPanel> createState() => _DashboardRightPanelState();
 }
 
-class _DashboardRightPanelState extends State<DashboardRightPanel>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
-
+class _DashboardRightPanelState extends State<DashboardRightPanel> {
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
     super.dispose();
   }
 
@@ -91,51 +83,16 @@ class _DashboardRightPanelState extends State<DashboardRightPanel>
   }
 
   Widget _buildHeader() {
-    return Row(
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        AnimatedBuilder(
-          animation: _pulseController,
-          builder: (context, child) {
-            return Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTheme.neonRed.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.neonRed.withValues(
-                      alpha: 0.3 * _pulseController.value,
-                    ),
-                    blurRadius: 8 + (4 * _pulseController.value),
-                    spreadRadius: 2 * _pulseController.value,
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.notifications_active,
-                color: AppTheme.neonRed,
-                size: 20,
-              ),
-            );
-          },
-        ),
-        const SizedBox(width: 12),
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Live Alerts",
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-            Text(
-              "Real-time updates",
-              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-            ),
-          ],
+        Text(
+          "Live Alerts",
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
+          ),
         ),
       ],
     );
