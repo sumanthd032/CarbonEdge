@@ -1,10 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
+import 'dart:math';
 import 'package:carbonedge/services/simulation_state.dart';
 import 'package:carbonedge/theme/app_theme.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
 // Global configuration
 class AlertConfig {
@@ -40,8 +39,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
 
   final Map<String, bool> _severityFilters = {
     "Critical": true,
-    "High": true,
-    "Medium": true,
+    "Warning": true,
     "Low": true,
   };
 
@@ -64,36 +62,32 @@ class _AlertsScreenState extends State<AlertsScreen> {
     _fetchHealthData(); // Initial fetch
   }
 
+  int _secondsElapsed = 0;
+  final Random _random = Random();
+
   Future<void> _fetchHealthData() async {
     if (_isPolling || !SimulationState.isConnected) return;
     _isPolling = true;
 
     try {
-      final response = await http
-          .get(Uri.parse('${AlertConfig.apiBaseUrl}/health'))
-          .timeout(const Duration(seconds: 5));
+      // Simulate successful connection
+      setState(() {
+        _connectionStatus = 'Connected';
+        _lastDataReceived = DateTime.now();
+        _processError = null;
+      });
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+      // Generate hardcoded data
+      _secondsElapsed++;
+      final data = _generateHardcodedHealthData();
 
+      try {
+        _processHealthData(data);
+      } catch (e) {
         setState(() {
-          _connectionStatus = 'Connected';
-          _lastDataReceived = DateTime.now();
-          _processError = null;
+          _processError = 'Processing Error: $e';
         });
-
-        try {
-          _processHealthData(data);
-        } catch (e) {
-          setState(() {
-            _processError = 'Processing Error: $e';
-          });
-          print('Processing error: $e');
-        }
-      } else {
-        setState(() {
-          _connectionStatus = 'Error: ${response.statusCode}';
-        });
+        print('Processing error: $e');
       }
     } catch (e) {
       setState(() {
@@ -103,6 +97,122 @@ class _AlertsScreenState extends State<AlertsScreen> {
     } finally {
       _isPolling = false;
     }
+  }
+
+  Map<String, dynamic> _generateHardcodedHealthData() {
+    // Anomaly appears at 40 seconds and lasts until 70 seconds (30 second duration)
+    // Then resets back to normal
+    final isAnomaly = _secondsElapsed >= 40 && _secondsElapsed < 70;
+    final threshold = 0.65;
+
+    // Reset counter after full cycle (70 seconds)
+    if (_secondsElapsed >= 70) {
+      _secondsElapsed = 0;
+    }
+
+    if (isAnomaly) {
+      return _generateAnomalyHealthData(threshold);
+    } else {
+      return _generateNormalHealthData(threshold);
+    }
+  }
+
+  Map<String, dynamic> _generateNormalHealthData(double threshold) {
+    final anomalyScore = 0.1 + _random.nextDouble() * 0.2; // 0.1 - 0.3
+
+    return {
+      'threshold': threshold,
+      'latest_predictions': {
+        'cement_kiln_01': {
+          'severity': 'normal',
+          'raw_anomaly_score': anomalyScore,
+          'confidence': 85.0 + _random.nextDouble() * 10.0,
+          'stability': 88.0 + _random.nextDouble() * 10.0,
+          'rolling_avg': 0.15 + _random.nextDouble() * 0.1,
+          'rolling_std': 0.02 + _random.nextDouble() * 0.03,
+          'top_causes': [],
+          'root_cause': 'System operating within normal parameters',
+          'recommendation': 'Continue monitoring - all systems nominal',
+        },
+      },
+      'latest_sensor_values': {
+        'cement_kiln_01': {
+          'values': {
+            'vibration_level': 2.1 + _random.nextDouble() * 0.5,
+            'kiln_pressure': 98.5 + _random.nextDouble() * 1.5,
+            'exhaust_co2': 4.2 + _random.nextDouble() * 0.3,
+            'temperature_zone_1': 850.0 + _random.nextDouble() * 10.0,
+            'temperature_zone_2': 1100.0 + _random.nextDouble() * 15.0,
+            'temperature_zone_3': 1350.0 + _random.nextDouble() * 20.0,
+            'feed_rate': 45.0 + _random.nextDouble() * 2.0,
+            'rotation_speed': 3.2 + _random.nextDouble() * 0.1,
+          },
+        },
+      },
+    };
+  }
+
+  Map<String, dynamic> _generateAnomalyHealthData(double threshold) {
+    final anomalyScore = 0.70 + _random.nextDouble() * 0.25; // 0.70 - 0.95
+
+    // Simplified severity: only Critical or Warning
+    String severity;
+    if (anomalyScore > 0.88) {
+      severity = 'critical';
+    } else {
+      severity = 'warning';
+    }
+
+    return {
+      'threshold': threshold,
+      'latest_predictions': {
+        'cement_kiln_01': {
+          'severity': severity,
+          'raw_anomaly_score': anomalyScore,
+          'confidence': 75.0 + _random.nextDouble() * 15.0,
+          'stability': 60.0 + _random.nextDouble() * 15.0,
+          'rolling_avg': 0.68 + _random.nextDouble() * 0.15,
+          'rolling_std': 0.12 + _random.nextDouble() * 0.08,
+          'top_causes': [
+            {
+              'sensor': 'vibration_level',
+              'impact': 8.2 + _random.nextDouble() * 1.5,
+            },
+            {
+              'sensor': 'temperature_zone_3',
+              'impact': 7.5 + _random.nextDouble() * 1.2,
+            },
+            {
+              'sensor': 'kiln_pressure',
+              'impact': 6.8 + _random.nextDouble() * 1.0,
+            },
+            {
+              'sensor': 'exhaust_co2',
+              'impact': 5.9 + _random.nextDouble() * 0.8,
+            },
+            {'sensor': 'feed_rate', 'impact': 4.5 + _random.nextDouble() * 0.7},
+          ],
+          'root_cause':
+              'Abnormal vibration pattern detected in kiln rotation system',
+          'recommendation':
+              'Immediate inspection of kiln bearings and drive system recommended. Reduce feed rate by 15% and monitor temperature zones.',
+        },
+      },
+      'latest_sensor_values': {
+        'cement_kiln_01': {
+          'values': {
+            'vibration_level': 8.5 + _random.nextDouble() * 1.5, // Elevated
+            'kiln_pressure': 105.0 + _random.nextDouble() * 3.0, // High
+            'exhaust_co2': 6.8 + _random.nextDouble() * 0.5, // Elevated
+            'temperature_zone_1': 870.0 + _random.nextDouble() * 15.0,
+            'temperature_zone_2': 1150.0 + _random.nextDouble() * 25.0,
+            'temperature_zone_3': 1420.0 + _random.nextDouble() * 30.0, // High
+            'feed_rate': 52.0 + _random.nextDouble() * 3.0, // Elevated
+            'rotation_speed': 3.6 + _random.nextDouble() * 0.2, // Elevated
+          },
+        },
+      },
+    };
   }
 
   void _processHealthData(Map<String, dynamic> data) {
@@ -296,9 +406,8 @@ class _AlertsScreenState extends State<AlertsScreen> {
       case 'danger':
         return 'Critical';
       case 'high':
-        return 'High';
       case 'warning':
-        return 'Medium';
+        return 'Warning';
       case 'normal':
       case 'low':
       default:
@@ -546,9 +655,8 @@ class _AlertsScreenState extends State<AlertsScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            Column(
+              spacing: 12,
               children: [
                 _buildFilterChip(
                   "Critical",
@@ -556,14 +664,9 @@ class _AlertsScreenState extends State<AlertsScreen> {
                   _severityFilters["Critical"]!,
                 ),
                 _buildFilterChip(
-                  "High",
-                  AppTheme.neonOrange,
-                  _severityFilters["High"]!,
-                ),
-                _buildFilterChip(
-                  "Medium",
+                  "Warning",
                   Colors.yellow.shade700,
-                  _severityFilters["Medium"]!,
+                  _severityFilters["Warning"]!,
                 ),
                 _buildFilterChip(
                   "Low",
@@ -602,10 +705,11 @@ class _AlertsScreenState extends State<AlertsScreen> {
         });
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        width: double.infinity,
+        height: 50,
         decoration: BoxDecoration(
           color: isActive ? color.withValues(alpha: 0.15) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isActive
                 ? color
@@ -613,12 +717,14 @@ class _AlertsScreenState extends State<AlertsScreen> {
             width: 1.5,
           ),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isActive ? color : AppTheme.textSecondary,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isActive ? color : AppTheme.textSecondary,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ),
@@ -1270,9 +1376,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
     switch (severity) {
       case "Critical":
         return AppTheme.neonRed;
-      case "High":
-        return AppTheme.neonOrange;
-      case "Medium":
+      case "Warning":
         return Colors.yellow.shade700;
       default:
         return AppTheme.neonCyan;

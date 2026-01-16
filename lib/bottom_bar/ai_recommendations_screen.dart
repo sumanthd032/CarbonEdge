@@ -1,10 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
+import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:percent_indicator/circular_percent_indicator.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 
 // ==================== THEME CONSTANTS ====================
 class NeonTheme {
@@ -87,56 +86,140 @@ class TopCause {
   }
 }
 
-// ==================== WEBSOCKET SERVICE ====================
-class WebSocketService {
-  final String url;
-  WebSocketChannel? _channel;
+// ==================== HARDCODED DATA SIMULATOR ====================
+class HardcodedDataSimulator {
   final _controller = StreamController<AIPrediction>.broadcast();
+  Timer? _timer;
+  int _secondsElapsed = 0;
+  final Random _random = Random();
 
-  WebSocketService(this.url);
+  // Severity stability - only change every 20 seconds
+  String _currentSeverity = 'normal';
+  int _lastSeverityChange = 0;
 
   Stream<AIPrediction> get stream => _controller.stream;
 
   void connect() {
-    _channel?.sink.close();
-    try {
-      _channel = WebSocketChannel.connect(Uri.parse(url));
-      _channel!.stream.listen(
-        (data) {
-          try {
-            final json = jsonDecode(data);
-            final prediction = AIPrediction.fromJson(json);
-            _controller.add(prediction);
-          } catch (e) {
-            print('Error parsing WebSocket data: $e');
-            _controller.addError(e);
-          }
-        },
-        onError: (error) {
-          print('WebSocket error: $error');
-          _controller.addError(error);
-          _reconnect();
-        },
-        onDone: () {
-          print('WebSocket connection closed');
-          _reconnect();
-        },
-      );
-    } catch (e) {
-      print('Connection error: $e');
-      _controller.addError(e);
-      _reconnect();
+    _secondsElapsed = 0;
+    _lastSeverityChange = 0;
+    _currentSeverity = 'normal';
+    _timer?.cancel();
+
+    // Emit data every 1 second
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _secondsElapsed++;
+      final prediction = _generatePrediction();
+      _controller.add(prediction);
+    });
+
+    // Emit first prediction immediately
+    _controller.add(_generatePrediction());
+  }
+
+  AIPrediction _generatePrediction() {
+    final now = DateTime.now();
+    final isAnomaly = _secondsElapsed >= 40;
+
+    if (isAnomaly) {
+      return _generateAnomalyPrediction(now);
+    } else {
+      return _generateNormalPrediction(now);
     }
   }
 
-  void _reconnect() {
-    Future.delayed(const Duration(seconds: 5), () {
-      connect();
-    });
+  AIPrediction _generateNormalPrediction(DateTime timestamp) {
+    // Much smaller variation to prevent flickering
+    final anomalyScore =
+        0.15 + _random.nextDouble() * 0.05; // 0.15 - 0.20 (very stable)
+    final confidence = 88.0 + _random.nextDouble() * 4.0; // 88 - 92%
+    final stability = 92.0 + _random.nextDouble() * 4.0; // 92 - 96%
+
+    return AIPrediction(
+      plantId: 'cement_kiln_01',
+      timestamp: _formatTimestamp(timestamp),
+      severity: 'normal',
+      anomalyScore: anomalyScore,
+      confidence: confidence,
+      stability: stability,
+      rollingAvg: 0.15 + _random.nextDouble() * 0.1,
+      rollingStd: 0.02 + _random.nextDouble() * 0.03,
+      topCauses: [
+        TopCause(
+          sensor: 'vibration_level',
+          impact: 2.1 + _random.nextDouble() * 1.5,
+        ),
+        TopCause(
+          sensor: 'kiln_pressure',
+          impact: 1.8 + _random.nextDouble() * 1.2,
+        ),
+        TopCause(
+          sensor: 'exhaust_co2',
+          impact: 1.5 + _random.nextDouble() * 1.0,
+        ),
+      ],
+      rootCause: 'System operating within normal parameters',
+      recommendation: 'Continue monitoring - all systems nominal',
+      bufferFilled: true,
+      bufferLen: 50,
+    );
+  }
+
+  AIPrediction _generateAnomalyPrediction(DateTime timestamp) {
+    final anomalyScore = 0.70 + _random.nextDouble() * 0.25; // 0.70 - 0.95
+    final confidence = 75.0 + _random.nextDouble() * 15.0; // 75 - 90%
+    final stability = 60.0 + _random.nextDouble() * 15.0; // 60 - 75%
+
+    // Simplified severity: only Critical or Warning
+    String severity;
+    if (anomalyScore > 0.88) {
+      severity = 'critical';
+    } else {
+      severity = 'warning';
+    }
+
+    return AIPrediction(
+      plantId: 'cement_kiln_01',
+      timestamp: _formatTimestamp(timestamp),
+      severity: severity,
+      anomalyScore: anomalyScore,
+      confidence: confidence,
+      stability: stability,
+      rollingAvg: 0.68 + _random.nextDouble() * 0.15,
+      rollingStd: 0.12 + _random.nextDouble() * 0.08,
+      topCauses: [
+        TopCause(
+          sensor: 'vibration_level',
+          impact: 8.2 + _random.nextDouble() * 1.5,
+        ),
+        TopCause(
+          sensor: 'temperature_zone_3',
+          impact: 7.5 + _random.nextDouble() * 1.2,
+        ),
+        TopCause(
+          sensor: 'kiln_pressure',
+          impact: 6.8 + _random.nextDouble() * 1.0,
+        ),
+        TopCause(
+          sensor: 'exhaust_co2',
+          impact: 5.9 + _random.nextDouble() * 0.8,
+        ),
+        TopCause(sensor: 'feed_rate', impact: 4.5 + _random.nextDouble() * 0.7),
+      ],
+      rootCause: 'Abnormal vibration pattern detected in kiln rotation system',
+      recommendation:
+          'Immediate inspection of kiln bearings and drive system recommended. Reduce feed rate by 15% and monitor temperature zones.',
+      bufferFilled: true,
+      bufferLen: 50,
+    );
+  }
+
+  String _formatTimestamp(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
+        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}';
   }
 
   void dispose() {
-    _channel?.sink.close();
+    _timer?.cancel();
     _controller.close();
   }
 }
@@ -150,7 +233,7 @@ class AIOptimizationPage extends StatefulWidget {
 }
 
 class _AIOptimizationPageState extends State<AIOptimizationPage> {
-  late WebSocketService _wsService;
+  late HardcodedDataSimulator _dataSimulator;
   StreamSubscription? _subscription;
 
   AIPrediction? _currentPrediction;
@@ -163,10 +246,10 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
   @override
   void initState() {
     super.initState();
-    _wsService = WebSocketService('ws://192.168.240.91:8000/ws');
+    _dataSimulator = HardcodedDataSimulator();
 
     // Subscribe FIRST to avoid missing events
-    _subscription = _wsService.stream.listen(
+    _subscription = _dataSimulator.stream.listen(
       (prediction) {
         if (mounted) {
           setState(() {
@@ -192,22 +275,13 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
     );
 
     // Connect AFTER subscribing
-    _wsService.connect();
-
-    // Safety timeout
-    Future.delayed(const Duration(seconds: 10), () {
-      if (mounted && _currentPrediction == null && _error == null) {
-        setState(() {
-          _error = "Connection timed out. Check server IP and network.";
-        });
-      }
-    });
+    _dataSimulator.connect();
   }
 
   @override
   void dispose() {
     _subscription?.cancel();
-    _wsService.dispose();
+    _dataSimulator.dispose();
     super.dispose();
   }
 
@@ -275,7 +349,7 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
                   _error = null;
                   _currentPrediction = null;
                 });
-                _wsService.connect();
+                _dataSimulator.connect();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: NeonTheme.cyan,
@@ -359,36 +433,23 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
   // ==================== PANELS ====================
 
   Widget _buildAIColumn(AIPrediction prediction) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: NeonPanel(
-            title: 'AI DIAGNOSTICS',
-            icon: Icons.psychology,
-            color: NeonTheme.orange,
-            expand: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildDetailRow(
-                  "ROOT CAUSE",
-                  prediction.rootCause,
-                  NeonTheme.red,
-                ),
-                const SizedBox(height: 12),
-                _buildDetailRow(
-                  "RECOMMENDATION",
-                  prediction.recommendation,
-                  NeonTheme.lime,
-                ),
-              ],
-            ),
+    return NeonPanel(
+      title: 'AI DIAGNOSTICS',
+      icon: Icons.psychology,
+      color: NeonTheme.orange,
+      expand: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildDetailRow("ROOT CAUSE", prediction.rootCause, NeonTheme.red),
+          const SizedBox(height: 20),
+          _buildDetailRow(
+            "RECOMMENDATION",
+            prediction.recommendation,
+            NeonTheme.lime,
           ),
-        ),
-        const SizedBox(height: 16),
-        _buildActionButtons(),
-      ],
+        ],
+      ),
     );
   }
 
@@ -585,55 +646,21 @@ class _AIOptimizationPageState extends State<AIOptimizationPage> {
           label,
           style: GoogleFonts.inter(
             color: color,
-            fontSize: 12,
+            fontSize: 15,
             fontWeight: FontWeight.bold,
             letterSpacing: 1.0,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Text(
           value,
           style: GoogleFonts.inter(
             color: NeonTheme.textMain,
-            fontSize: 12,
+            fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
-          maxLines: 2,
+          maxLines: 3,
           overflow: TextOverflow.ellipsis,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActionButtons() {
-    return Row(
-      children: [
-        Expanded(
-          child: ElevatedButton.icon(
-            icon: const Icon(Icons.check_circle_outline),
-            label: const Text("APPROVE"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: NeonTheme.lime.withOpacity(0.2),
-              foregroundColor: NeonTheme.lime,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              side: const BorderSide(color: NeonTheme.lime),
-            ),
-            onPressed: () {},
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: ElevatedButton.icon(
-            icon: const Icon(Icons.cancel_outlined),
-            label: const Text("REJECT"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: NeonTheme.red.withOpacity(0.2),
-              foregroundColor: NeonTheme.red,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              side: const BorderSide(color: NeonTheme.red),
-            ),
-            onPressed: () {},
-          ),
         ),
       ],
     );
@@ -839,7 +866,7 @@ class NeonLineChart extends StatelessWidget {
           ),
         ],
         minY: 0,
-        maxY: 1.5, // Adjusted for typical anomaly score range (0-1.5)
+        maxY: 1.0, // Y-axis range 0-1.0
       ),
     );
   }
