@@ -99,8 +99,8 @@ class HardcodedDataSimulator {
   Stream<AIPrediction> get stream => _controller.stream;
 
   void connect() {
-    _secondsElapsed = 0;
-    _currentSeverity = 'normal';
+    _secondsElapsed = _random.nextInt(80); // Start at random point in 80s cycle
+    _currentSeverity = 'low';
     _timer?.cancel();
 
     // Emit data every 1 second
@@ -116,12 +116,12 @@ class HardcodedDataSimulator {
 
   AIPrediction _generatePrediction() {
     final now = DateTime.now();
-    // Anomaly appears at 35 seconds and lasts until 45 seconds (10 second duration)
+    // Anomaly appears at 60 seconds and lasts until 80 seconds (20 second duration)
     // Then resets back to normal
-    final isAnomaly = _secondsElapsed >= 35 && _secondsElapsed < 45;
+    final isAnomaly = _secondsElapsed >= 60 && _secondsElapsed < 80;
 
-    // Reset counter after full cycle (45 seconds)
-    if (_secondsElapsed >= 45) {
+    // Reset counter after full cycle (80 seconds)
+    if (_secondsElapsed >= 80) {
       _secondsElapsed = 0;
       _currentSeverity = 'low';
     }
@@ -171,8 +171,8 @@ class HardcodedDataSimulator {
   }
 
   AIPrediction _generateAnomalyPrediction(DateTime timestamp) {
-    // Anomaly score in range 0.65 - 0.95 to cover Warning and High (always > 0.6)
-    final anomalyScore = 0.65 + _random.nextDouble() * 0.30;
+    // Anomaly score in range 0.70 - 0.98 to cover Warning and High (always > 0.7)
+    final anomalyScore = 0.70 + _random.nextDouble() * 0.28;
     final confidence = 78.0 + _random.nextDouble() * 8.0;
     final stability = 65.0 + _random.nextDouble() * 8.0;
 

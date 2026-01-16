@@ -62,7 +62,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
     _fetchHealthData(); // Initial fetch
   }
 
-  int _secondsElapsed = 0;
+  int _secondsElapsed = Random().nextInt(80);
   String _currentSeverity = 'low';
   final Random _random = Random();
 
@@ -101,13 +101,13 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   Map<String, dynamic> _generateHardcodedHealthData() {
-    // Anomaly appears at 35 seconds and lasts until 45 seconds (10 second duration)
+    // Anomaly appears at 60 seconds and lasts until 80 seconds (20 second duration)
     // Then resets back to normal
-    final isAnomaly = _secondsElapsed >= 35 && _secondsElapsed < 45;
+    final isAnomaly = _secondsElapsed >= 60 && _secondsElapsed < 80;
     final threshold = 0.65;
 
-    // Reset counter after full cycle (45 seconds)
-    if (_secondsElapsed >= 45) {
+    // Reset counter after full cycle (80 seconds)
+    if (_secondsElapsed >= 80) {
       _secondsElapsed = 0;
       _currentSeverity = 'low';
     }
@@ -157,8 +157,8 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   Map<String, dynamic> _generateAnomalyHealthData(double threshold) {
-    // Range 0.65 - 0.95 to cover Warning and High (always > 0.6)
-    final anomalyScore = 0.65 + _random.nextDouble() * 0.30;
+    // Range 0.70 - 0.98 to cover Warning and High (always > 0.7)
+    final anomalyScore = 0.70 + _random.nextDouble() * 0.28;
 
     // Stick to one severity for the duration of the anomaly
     if (_currentSeverity == 'normal' || _currentSeverity == 'low') {
