@@ -43,6 +43,7 @@ flutter:
 
   # Assets
   assets:
+    - assets/logo.png
     - assets/
     # Add your logo, icons, images here later
     # - assets/images/logo.png
