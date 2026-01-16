@@ -116,9 +116,15 @@ class HardcodedDataSimulator {
 
   AIPrediction _generatePrediction() {
     final now = DateTime.now();
-    // Anomaly appears at 60 seconds and lasts until 75 seconds (15 second duration)
+    // Anomaly appears at 35 seconds and lasts until 45 seconds (10 second duration)
     // Then resets back to normal
-    final isAnomaly = _secondsElapsed >= 60 && _secondsElapsed < 75;
+    final isAnomaly = _secondsElapsed >= 35 && _secondsElapsed < 45;
+
+    // Reset counter after full cycle (45 seconds)
+    if (_secondsElapsed >= 45) {
+      _secondsElapsed = 0;
+      _currentSeverity = 'low';
+    }
 
     if (isAnomaly) {
       return _generateAnomalyPrediction(now);
@@ -165,8 +171,8 @@ class HardcodedDataSimulator {
   }
 
   AIPrediction _generateAnomalyPrediction(DateTime timestamp) {
-    // Anomaly score in range 0.55 - 0.95 to cover Warning and High
-    final anomalyScore = 0.55 + _random.nextDouble() * 0.40;
+    // Anomaly score in range 0.65 - 0.95 to cover Warning and High (always > 0.6)
+    final anomalyScore = 0.65 + _random.nextDouble() * 0.30;
     final confidence = 78.0 + _random.nextDouble() * 8.0;
     final stability = 65.0 + _random.nextDouble() * 8.0;
 

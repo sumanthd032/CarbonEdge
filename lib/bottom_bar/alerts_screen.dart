@@ -101,15 +101,15 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   Map<String, dynamic> _generateHardcodedHealthData() {
-    // Anomaly appears at 60 seconds and lasts until 75 seconds (15 second duration)
+    // Anomaly appears at 35 seconds and lasts until 45 seconds (10 second duration)
     // Then resets back to normal
-    final isAnomaly = _secondsElapsed >= 60 && _secondsElapsed < 75;
+    final isAnomaly = _secondsElapsed >= 35 && _secondsElapsed < 45;
     final threshold = 0.65;
 
-    // Reset counter after full cycle (75 seconds)
-    if (_secondsElapsed >= 75) {
+    // Reset counter after full cycle (45 seconds)
+    if (_secondsElapsed >= 45) {
       _secondsElapsed = 0;
-      _currentSeverity = 'normal';
+      _currentSeverity = 'low';
     }
 
     if (isAnomaly) {
@@ -157,8 +157,8 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   Map<String, dynamic> _generateAnomalyHealthData(double threshold) {
-    // Range 0.55 - 0.95 to cover Warning and High
-    final anomalyScore = 0.55 + _random.nextDouble() * 0.40;
+    // Range 0.65 - 0.95 to cover Warning and High (always > 0.6)
+    final anomalyScore = 0.65 + _random.nextDouble() * 0.30;
 
     // Stick to one severity for the duration of the anomaly
     if (_currentSeverity == 'normal' || _currentSeverity == 'low') {

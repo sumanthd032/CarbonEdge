@@ -22,15 +22,52 @@ class ReportsScreen extends StatefulWidget {
 class _ReportsScreenState extends State<ReportsScreen> {
   String selectedReportType = "Monthly Summary";
   String selectedDateRange = "Last 30 Days";
+  String selectedSnapshot = "Current Baseline";
 
-  final List<Map<String, dynamic>> emissionsData = [
-    {'month': 'Jan', 'actual': 42.0, 'predicted': 38.0, 'target': 30.0},
-    {'month': 'Feb', 'actual': 45.0, 'predicted': 40.0, 'target': 31.0},
-    {'month': 'Mar', 'actual': 40.0, 'predicted': 39.0, 'target': 30.0},
-    {'month': 'Apr', 'actual': 38.0, 'predicted': 37.0, 'target': 29.0},
-    {'month': 'May', 'actual': 36.0, 'predicted': 35.0, 'target': 28.0},
-    {'month': 'Jun', 'actual': 34.0, 'predicted': 34.0, 'target': 27.0},
+  final List<String> snapshotOptions = [
+    "Current Baseline",
+    "Q1 2024 Summary",
+    "Peak Production Cycle",
+    "Maintenance Downtime",
   ];
+
+  final Map<String, List<Map<String, dynamic>>> hardcodedSnapshots = {
+    "Current Baseline": [
+      {'month': 'Jan', 'actual': 42.0, 'predicted': 38.0, 'target': 30.0},
+      {'month': 'Feb', 'actual': 45.0, 'predicted': 40.0, 'target': 31.0},
+      {'month': 'Mar', 'actual': 40.0, 'predicted': 39.0, 'target': 30.0},
+      {'month': 'Apr', 'actual': 38.0, 'predicted': 37.0, 'target': 29.0},
+      {'month': 'May', 'actual': 36.0, 'predicted': 35.0, 'target': 28.0},
+      {'month': 'Jun', 'actual': 34.0, 'predicted': 34.0, 'target': 27.0},
+    ],
+    "Q1 2024 Summary": [
+      {'month': 'Jan', 'actual': 55.0, 'predicted': 38.0, 'target': 30.0},
+      {'month': 'Feb', 'actual': 58.0, 'predicted': 40.0, 'target': 31.0},
+      {'month': 'Mar', 'actual': 52.0, 'predicted': 39.0, 'target': 30.0},
+      {'month': 'Apr', 'actual': 48.0, 'predicted': 37.0, 'target': 29.0},
+      {'month': 'May', 'actual': 45.0, 'predicted': 35.0, 'target': 28.0},
+      {'month': 'Jun', 'actual': 42.0, 'predicted': 34.0, 'target': 27.0},
+    ],
+    "Peak Production Cycle": [
+      {'month': 'Jan', 'actual': 72.0, 'predicted': 68.0, 'target': 60.0},
+      {'month': 'Feb', 'actual': 75.0, 'predicted': 70.0, 'target': 61.0},
+      {'month': 'Mar', 'actual': 70.0, 'predicted': 69.0, 'target': 60.0},
+      {'month': 'Apr', 'actual': 68.0, 'predicted': 67.0, 'target': 59.0},
+      {'month': 'May', 'actual': 66.0, 'predicted': 65.0, 'target': 58.0},
+      {'month': 'Jun', 'actual': 64.0, 'predicted': 64.0, 'target': 57.0},
+    ],
+    "Maintenance Downtime": [
+      {'month': 'Jan', 'actual': 12.0, 'predicted': 15.0, 'target': 10.0},
+      {'month': 'Feb', 'actual': 15.0, 'predicted': 18.0, 'target': 11.0},
+      {'month': 'Mar', 'actual': 10.0, 'predicted': 12.0, 'target': 10.0},
+      {'month': 'Apr', 'actual': 8.0, 'predicted': 10.0, 'target': 9.0},
+      {'month': 'May', 'actual': 6.0, 'predicted': 8.0, 'target': 8.0},
+      {'month': 'Jun', 'actual': 5.0, 'predicted': 6.0, 'target': 7.0},
+    ],
+  };
+
+  List<Map<String, dynamic>> get emissionsData =>
+      hardcodedSnapshots[selectedSnapshot]!;
 
   @override
   Widget build(BuildContext context) {
@@ -290,6 +327,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               (val) => setState(() => selectedDateRange = val!),
                             ),
                           ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildDropdown(
+                              "Data Snapshot",
+                              selectedSnapshot,
+                              snapshotOptions,
+                              (val) => setState(() => selectedSnapshot = val!),
+                            ),
+                          ),
                         ],
                       )
                     : Column(
@@ -315,6 +361,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               "Custom Range",
                             ],
                             (val) => setState(() => selectedDateRange = val!),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildDropdown(
+                            "Select Hardcoded Data Snapshot",
+                            selectedSnapshot,
+                            snapshotOptions,
+                            (val) => setState(() => selectedSnapshot = val!),
                           ),
                         ],
                       );
