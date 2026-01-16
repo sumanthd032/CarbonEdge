@@ -95,13 +95,11 @@ class HardcodedDataSimulator {
 
   // Severity stability - only change every 20 seconds
   String _currentSeverity = 'normal';
-  int _lastSeverityChange = 0;
 
   Stream<AIPrediction> get stream => _controller.stream;
 
   void connect() {
     _secondsElapsed = 0;
-    _lastSeverityChange = 0;
     _currentSeverity = 'normal';
     _timer?.cancel();
 
@@ -118,7 +116,9 @@ class HardcodedDataSimulator {
 
   AIPrediction _generatePrediction() {
     final now = DateTime.now();
-    final isAnomaly = _secondsElapsed >= 40;
+    // Anomaly appears at 60 seconds and lasts until 75 seconds (15 second duration)
+    // Then resets back to normal
+    final isAnomaly = _secondsElapsed >= 60 && _secondsElapsed < 75;
 
     if (isAnomaly) {
       return _generateAnomalyPrediction(now);
@@ -128,33 +128,33 @@ class HardcodedDataSimulator {
   }
 
   AIPrediction _generateNormalPrediction(DateTime timestamp) {
-    // Much smaller variation to prevent flickering
+    // Range 0.15 - 0.30 for Low as requested
     final anomalyScore =
-        0.15 + _random.nextDouble() * 0.05; // 0.15 - 0.20 (very stable)
-    final confidence = 88.0 + _random.nextDouble() * 4.0; // 88 - 92%
-    final stability = 92.0 + _random.nextDouble() * 4.0; // 92 - 96%
+        0.15 + _random.nextDouble() * 0.15; // 0.15 - 0.30 (Low range)
+    final confidence = 88.0 + _random.nextDouble() * 4.0;
+    final stability = 92.0 + _random.nextDouble() * 4.0;
 
     return AIPrediction(
       plantId: 'cement_kiln_01',
       timestamp: _formatTimestamp(timestamp),
-      severity: 'normal',
+      severity: 'low',
       anomalyScore: anomalyScore,
       confidence: confidence,
       stability: stability,
-      rollingAvg: 0.15 + _random.nextDouble() * 0.1,
-      rollingStd: 0.02 + _random.nextDouble() * 0.03,
+      rollingAvg: 0.16 + _random.nextDouble() * 0.1,
+      rollingStd: 0.025 + _random.nextDouble() * 0.01,
       topCauses: [
         TopCause(
           sensor: 'vibration_level',
-          impact: 2.1 + _random.nextDouble() * 1.5,
+          impact: 2.2 + _random.nextDouble() * 0.3,
         ),
         TopCause(
           sensor: 'kiln_pressure',
-          impact: 1.8 + _random.nextDouble() * 1.2,
+          impact: 1.9 + _random.nextDouble() * 0.2,
         ),
         TopCause(
           sensor: 'exhaust_co2',
-          impact: 1.5 + _random.nextDouble() * 1.0,
+          impact: 1.6 + _random.nextDouble() * 0.2,
         ),
       ],
       rootCause: 'System operating within normal parameters',
@@ -165,22 +165,26 @@ class HardcodedDataSimulator {
   }
 
   AIPrediction _generateAnomalyPrediction(DateTime timestamp) {
-    final anomalyScore = 0.70 + _random.nextDouble() * 0.25; // 0.70 - 0.95
-    final confidence = 75.0 + _random.nextDouble() * 15.0; // 75 - 90%
-    final stability = 60.0 + _random.nextDouble() * 15.0; // 60 - 75%
+    // Anomaly score in range 0.55 - 0.95 to cover Warning and High
+    final anomalyScore = 0.55 + _random.nextDouble() * 0.40;
+    final confidence = 78.0 + _random.nextDouble() * 8.0;
+    final stability = 65.0 + _random.nextDouble() * 8.0;
 
-    // Simplified severity: only Critical or Warning
-    String severity;
-    if (anomalyScore > 0.88) {
-      severity = 'critical';
-    } else {
-      severity = 'warning';
+    // Stick to one severity for the duration of the anomaly
+    if (_currentSeverity == 'normal' || _currentSeverity == 'low') {
+      if (anomalyScore > 0.75) {
+        _currentSeverity = 'high';
+      } else if (anomalyScore > 0.5) {
+        _currentSeverity = 'warning';
+      } else {
+        _currentSeverity = 'low';
+      }
     }
 
     return AIPrediction(
       plantId: 'cement_kiln_01',
       timestamp: _formatTimestamp(timestamp),
-      severity: severity,
+      severity: _currentSeverity,
       anomalyScore: anomalyScore,
       confidence: confidence,
       stability: stability,

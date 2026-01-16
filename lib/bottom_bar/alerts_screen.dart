@@ -38,7 +38,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
   final Map<String, AnomalyTracker> _anomalyTrackers = {};
 
   final Map<String, bool> _severityFilters = {
-    "Critical": true,
+    "High": true,
     "Warning": true,
     "Low": true,
   };
@@ -63,6 +63,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   int _secondsElapsed = 0;
+  String _currentSeverity = 'low';
   final Random _random = Random();
 
   Future<void> _fetchHealthData() async {
@@ -100,14 +101,15 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   Map<String, dynamic> _generateHardcodedHealthData() {
-    // Anomaly appears at 40 seconds and lasts until 70 seconds (30 second duration)
+    // Anomaly appears at 60 seconds and lasts until 75 seconds (15 second duration)
     // Then resets back to normal
-    final isAnomaly = _secondsElapsed >= 40 && _secondsElapsed < 70;
+    final isAnomaly = _secondsElapsed >= 60 && _secondsElapsed < 75;
     final threshold = 0.65;
 
-    // Reset counter after full cycle (70 seconds)
-    if (_secondsElapsed >= 70) {
+    // Reset counter after full cycle (75 seconds)
+    if (_secondsElapsed >= 75) {
       _secondsElapsed = 0;
+      _currentSeverity = 'normal';
     }
 
     if (isAnomaly) {
@@ -118,16 +120,18 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   Map<String, dynamic> _generateNormalHealthData(double threshold) {
-    final anomalyScore = 0.1 + _random.nextDouble() * 0.2; // 0.1 - 0.3
+    // Range 0.3 - 0.5 for Low as requested
+    final anomalyScore =
+        0.15 + _random.nextDouble() * 0.15; // 0.15 - 0.30 (Low range)
 
     return {
       'threshold': threshold,
       'latest_predictions': {
         'cement_kiln_01': {
-          'severity': 'normal',
+          'severity': 'low',
           'raw_anomaly_score': anomalyScore,
-          'confidence': 85.0 + _random.nextDouble() * 10.0,
-          'stability': 88.0 + _random.nextDouble() * 10.0,
+          'confidence': 88.0 + _random.nextDouble() * 4.0,
+          'stability': 92.0 + _random.nextDouble() * 4.0,
           'rolling_avg': 0.15 + _random.nextDouble() * 0.1,
           'rolling_std': 0.02 + _random.nextDouble() * 0.03,
           'top_causes': [],
@@ -153,21 +157,25 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   Map<String, dynamic> _generateAnomalyHealthData(double threshold) {
-    final anomalyScore = 0.70 + _random.nextDouble() * 0.25; // 0.70 - 0.95
+    // Range 0.55 - 0.95 to cover Warning and High
+    final anomalyScore = 0.55 + _random.nextDouble() * 0.40;
 
-    // Simplified severity: only Critical or Warning
-    String severity;
-    if (anomalyScore > 0.88) {
-      severity = 'critical';
-    } else {
-      severity = 'warning';
+    // Stick to one severity for the duration of the anomaly
+    if (_currentSeverity == 'normal' || _currentSeverity == 'low') {
+      if (anomalyScore > 0.75) {
+        _currentSeverity = 'high';
+      } else if (anomalyScore > 0.5) {
+        _currentSeverity = 'warning';
+      } else {
+        _currentSeverity = 'low';
+      }
     }
 
     return {
       'threshold': threshold,
       'latest_predictions': {
         'cement_kiln_01': {
-          'severity': severity,
+          'severity': _currentSeverity,
           'raw_anomaly_score': anomalyScore,
           'confidence': 75.0 + _random.nextDouble() * 15.0,
           'stability': 60.0 + _random.nextDouble() * 15.0,
@@ -243,7 +251,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
     final rawSeverity = (prediction['severity'] ?? 'normal')
         .toString()
         .toLowerCase();
-    final isAbnormal = rawSeverity != 'normal';
+    final isAbnormal = rawSeverity != 'normal' && rawSeverity != 'low';
 
     // Initialize tracker if it doesn't exist
     if (!_anomalyTrackers.containsKey(plantId)) {
@@ -403,9 +411,9 @@ class _AlertsScreenState extends State<AlertsScreen> {
   String _mapSeverity(String apiSeverity) {
     switch (apiSeverity.toLowerCase()) {
       case 'critical':
-      case 'danger':
-        return 'Critical';
       case 'high':
+      case 'danger':
+        return 'High';
       case 'warning':
         return 'Warning';
       case 'normal':
@@ -659,9 +667,9 @@ class _AlertsScreenState extends State<AlertsScreen> {
               spacing: 12,
               children: [
                 _buildFilterChip(
-                  "Critical",
+                  "High",
                   AppTheme.neonRed,
-                  _severityFilters["Critical"]!,
+                  _severityFilters["High"]!,
                 ),
                 _buildFilterChip(
                   "Warning",
@@ -1374,10 +1382,11 @@ class _AlertsScreenState extends State<AlertsScreen> {
 
   Color _getSeverityColor(String severity) {
     switch (severity) {
-      case "Critical":
+      case "High":
         return AppTheme.neonRed;
       case "Warning":
         return Colors.yellow.shade700;
+      case "Low":
       default:
         return AppTheme.neonCyan;
     }
